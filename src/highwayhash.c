@@ -4,11 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
-This code is compatible with C90 with the additional requirement of
-supporting uint64_t.
-*/
-
 /*////////////////////////////////////////////////////////////////////////////*/
 /* Internal implementation                                                    */
 /*////////////////////////////////////////////////////////////////////////////*/
@@ -28,8 +23,8 @@ void HighwayHashReset(const uint64_t key[4], HighwayHashState *state) {
   }
 }
 
-static void ZipperMergeAndAdd(const uint64_t v1, const uint64_t v0,
-                              uint64_t *add1, uint64_t *add0) {
+void ZipperMergeAndAdd(const uint64_t v1, const uint64_t v0, uint64_t *add1,
+                       uint64_t *add0) {
   *add0 += (((v0 & 0xff000000ull) | (v1 & 0xff00000000ull)) >> 24) |
            (((v0 & 0xff0000000000ull) | (v1 & 0xff000000000000ull)) >> 16) |
            (v0 & 0xff0000ull) | ((v0 & 0xff00ull) << 32) |
@@ -40,9 +35,8 @@ static void ZipperMergeAndAdd(const uint64_t v1, const uint64_t v0,
            ((v1 & 0xffull) << 48) | (v0 & 0xff00000000000000ull);
 }
 
-static void Update(const uint64_t lanes[4], HighwayHashState *state) {
-  int i;
-  for (i = 0; i < 4; ++i) {
+void Update(const uint64_t lanes[4], HighwayHashState *state) {
+  for (int i = 0; i < 4; ++i) {
     state->v1[i] += state->mul0[i] + lanes[i];
     state->mul0[i] ^= (state->v1[i] & 0xffffffff) * (state->v0[i] >> 32);
     state->v0[i] += state->mul1[i];
@@ -54,7 +48,7 @@ static void Update(const uint64_t lanes[4], HighwayHashState *state) {
   ZipperMergeAndAdd(state->v0[3], state->v0[2], &state->v1[3], &state->v1[2]);
 }
 
-static uint64_t Read64(const uint8_t *src) {
+uint64_t Read64(const uint8_t *src) {
   return (uint64_t)src[0] | ((uint64_t)src[1] << 8) | ((uint64_t)src[2] << 16) |
          ((uint64_t)src[3] << 24) | ((uint64_t)src[4] << 32) |
          ((uint64_t)src[5] << 40) | ((uint64_t)src[6] << 48) |
@@ -70,9 +64,8 @@ void HighwayHashUpdatePacket(const uint8_t *packet, HighwayHashState *state) {
   Update(lanes, state);
 }
 
-static void Rotate32By(uint64_t count, uint64_t lanes[4]) {
-  int i;
-  for (i = 0; i < 4; ++i) {
+void Rotate32By(uint64_t count, uint64_t lanes[4]) {
+  for (int i = 0; i < 4; ++i) {
     uint32_t half0 = lanes[i] & 0xffffffff;
     uint32_t half1 = (lanes[i] >> 32);
     lanes[i] = (half0 << count) | (half0 >> (32 - count));
@@ -82,19 +75,18 @@ static void Rotate32By(uint64_t count, uint64_t lanes[4]) {
 
 void HighwayHashUpdateRemainder(const uint8_t *bytes, const size_t size_mod32,
                                 HighwayHashState *state) {
-  int i;
   const size_t size_mod4 = size_mod32 & 3;
   const uint8_t *remainder = bytes + (size_mod32 & ~3);
   uint8_t packet[32] = {0};
-  for (i = 0; i < 4; ++i) {
+  for (int i = 0; i < 4; ++i) {
     state->v0[i] += ((uint64_t)size_mod32 << 32) + size_mod32;
   }
   Rotate32By(size_mod32, state->v1);
-  for (i = 0; i < remainder - bytes; i++) {
+  for (int i = 0; i < remainder - bytes; i++) {
     packet[i] = bytes[i];
   }
   if (size_mod32 & 16) {
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
       packet[28 + i] = remainder[i + size_mod4 - 4];
     }
   } else {
@@ -120,37 +112,34 @@ void PermuteAndUpdate(HighwayHashState *state) {
   Update(permuted, state);
 }
 
-static void ModularReduction(uint64_t a3_unmasked, uint64_t a2, uint64_t a1,
-                             uint64_t a0, uint64_t *m1, uint64_t *m0) {
+void ModularReduction(uint64_t a3_unmasked, uint64_t a2, uint64_t a1,
+                      uint64_t a0, uint64_t *m1, uint64_t *m0) {
   uint64_t a3 = a3_unmasked & 0x3FFFFFFFFFFFFFFFull;
   *m1 = a1 ^ ((a3 << 1) | (a2 >> 63)) ^ ((a3 << 2) | (a2 >> 62));
   *m0 = a0 ^ (a2 << 1) ^ (a2 << 2);
 }
 
-static uint64_t HighwayHashFinalize64(HighwayHashState *state) {
-  int i;
-  for (i = 0; i < 4; i++) {
+uint64_t HighwayHashFinalize64(HighwayHashState *state) {
+  for (int i = 0; i < 4; i++) {
     PermuteAndUpdate(state);
   }
   return state->v0[0] + state->v1[0] + state->mul0[0] + state->mul1[0];
 }
 
-static void HighwayHashFinalize128(HighwayHashState *state, uint64_t hash[2]) {
-  int i;
-  for (i = 0; i < 6; i++) {
+void HighwayHashFinalize128(HighwayHashState *state, uint64_t hash[2]) {
+  for (int i = 0; i < 6; i++) {
     PermuteAndUpdate(state);
   }
   hash[0] = state->v0[0] + state->mul0[0] + state->v1[2] + state->mul1[2];
   hash[1] = state->v0[1] + state->mul0[1] + state->v1[3] + state->mul1[3];
 }
 
-static void HighwayHashFinalize256(HighwayHashState *state, uint64_t hash[4]) {
-  int i;
+void HighwayHashFinalize256(HighwayHashState *state, uint64_t hash[4]) {
   /* We anticipate that 256-bit hashing will be mostly used with long messages
      because storing and using the 256-bit hash (in contrast to 128-bit)
      carries a larger additional constant cost by itself. Doing extra rounds
      here hardly increases the per-byte cost of long messages. */
-  for (i = 0; i < 10; i++) {
+  for (int i = 0; i < 10; i++) {
     PermuteAndUpdate(state);
   }
   ModularReduction(state->v1[1] + state->mul1[1], state->v1[0] + state->mul1[0],
@@ -165,10 +154,11 @@ static void HighwayHashFinalize256(HighwayHashState *state, uint64_t hash[4]) {
 /* Non-cat API: single call on full data                                      */
 /*////////////////////////////////////////////////////////////////////////////*/
 
-static void ProcessAll(const uint8_t *data, size_t size, const uint64_t key[4],
-                       HighwayHashState *state) {
-  size_t i;
+void ProcessAll(const uint8_t *data, size_t size, const uint64_t key[4],
+                HighwayHashState *state) {
   HighwayHashReset(key, state);
+
+  size_t i;
   for (i = 0; i + 32 <= size; i += 32) {
     HighwayHashUpdatePacket(data + i, state);
   }
@@ -208,10 +198,9 @@ void HighwayHashCatStart(const uint64_t key[4], HighwayHashCat *state) {
 
 void HighwayHashCatAppend(const uint8_t *bytes, size_t num,
                           HighwayHashCat *state) {
-  size_t i;
   if (state->num != 0) {
     size_t num_add = num > (32u - state->num) ? (32u - state->num) : num;
-    for (i = 0; i < num_add; i++) {
+    for (size_t i = 0; i < num_add; i++) {
       state->packet[state->num + i] = bytes[i];
     }
     state->num += num_add;
@@ -227,7 +216,7 @@ void HighwayHashCatAppend(const uint8_t *bytes, size_t num,
     num -= 32;
     bytes += 32;
   }
-  for (i = 0; i < num; i++) {
+  for (size_t i = 0; i < num; i++) {
     state->packet[state->num] = bytes[i];
     state->num++;
   }

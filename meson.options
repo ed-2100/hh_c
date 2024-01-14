@@ -1,0 +1,1 @@
+option('simd', type : 'combo', choices : ['none', 'avx2'], value : 'none')
