@@ -1,4 +1,4 @@
-#include "c/highwayhash.h"
+#include "hh_c/highwayhash.h"
 
 #include <inttypes.h>
 #include <stdio.h>

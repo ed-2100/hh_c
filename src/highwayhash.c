@@ -1,4 +1,4 @@
-#include "c/highwayhash.h"
+#include "hh_c/highwayhash.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,14 +22,10 @@ void HighwayHashReset(const uint64_t key[4], HighwayHashState *state) {
   state->mul1[1] = 0xc0acf169b5f18a8cull;
   state->mul1[2] = 0xbe5466cf34e90c6cull;
   state->mul1[3] = 0x452821e638d01377ull;
-  state->v0[0] = state->mul0[0] ^ key[0];
-  state->v0[1] = state->mul0[1] ^ key[1];
-  state->v0[2] = state->mul0[2] ^ key[2];
-  state->v0[3] = state->mul0[3] ^ key[3];
-  state->v1[0] = state->mul1[0] ^ ((key[0] >> 32) | (key[0] << 32));
-  state->v1[1] = state->mul1[1] ^ ((key[1] >> 32) | (key[1] << 32));
-  state->v1[2] = state->mul1[2] ^ ((key[2] >> 32) | (key[2] << 32));
-  state->v1[3] = state->mul1[3] ^ ((key[3] >> 32) | (key[3] << 32));
+  for (int i = 0; i < 4; i++) {
+    state->v0[i] = state->mul0[i] ^ key[i];
+    state->v1[i] = state->mul1[i] ^ ((key[i] >> 32) | (key[i] << 32));
+  }
 }
 
 static void ZipperMergeAndAdd(const uint64_t v1, const uint64_t v0,
