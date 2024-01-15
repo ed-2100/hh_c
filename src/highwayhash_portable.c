@@ -1,5 +1,5 @@
 #define HIGHWAYHASH_PORTABLE
-#include "hh_c/highwayhash_internal.h"
+#include "hh_c/highwayhash.h"
 
 #include <stdint.h>
 #include <stdlib.h>

@@ -13,12 +13,15 @@
 /* Internal implementation                                                    */
 /*////////////////////////////////////////////////////////////////////////////*/
 
+// Verified.
 static inline void InternalHighwayHashReset(HighwayHashState *restrict state,
                                             const __m256i *key) {
-  const uint64_t init_mul0[] = {0xdbe6d5d5fe4cce2f, 0xa4093822299f31d0,
-                                0x13198a2e03707344, 0x243f6a8885a308d3};
-  const uint64_t init_mul1[] = {0x3bd39e10cb0ef593, 0xc0acf169b5f18a8c,
-                                0xbe5466cf34e90c6c, 0x452821e638d01377};
+  alignas(alignof(__m256i))
+      const uint64_t init_mul0[] = {0xdbe6d5d5fe4cce2f, 0xa4093822299f31d0,
+                                    0x13198a2e03707344, 0x243f6a8885a308d3};
+  alignas(alignof(__m256i))
+      const uint64_t init_mul1[] = {0x3bd39e10cb0ef593, 0xc0acf169b5f18a8c,
+                                    0xbe5466cf34e90c6c, 0x452821e638d01377};
   state->mul0 = _mm256_load_si256((const __m256i *)init_mul0);
   state->mul1 = _mm256_load_si256((const __m256i *)init_mul1);
   state->v0 = _mm256_xor_si256(state->mul0, *key);
@@ -71,9 +74,10 @@ static void InternalHighwayHashUpdatePacket(HighwayHashState *restrict state,
   InternalUpdate(state, &temp);
 }
 
-static inline __m256i InternalRotate32By(const __m256i lanes, const int count) {
-  return _mm256_or_si256(_mm256_slli_epi32(lanes, count),
-                         _mm256_srli_epi32(lanes, 32 - count));
+static inline __m256i InternalRotate32By(const __m256i *restrict lanes,
+                                         const __m256i *restrict count) {
+  return _mm256_or_si256(_mm256_sllv_epi32(*lanes, *count),
+                         _mm256_srlv_epi32(*lanes, 32 - *count));
 }
 
 static inline void
@@ -81,10 +85,11 @@ InternalHighwayHashUpdateRemainder(HighwayHashState *restrict state,
                                    const __m256i *bytes, const int size_mod32) {
   const size_t size_mod4 = size_mod32 & 3;
   const uint8_t *remainder = (const uint8_t *)bytes + (size_mod32 & ~3);
+  const __m256i size_mod32_256 = _mm256_set1_epi32(size_mod32);
 
-  state->v0 = _mm256_add_epi64(state->v0, _mm256_set1_epi32(size_mod32));
+  state->v0 = _mm256_add_epi64(state->v0, size_mod32_256);
 
-  InternalRotate32By(state->v1, size_mod32);
+  InternalRotate32By(&state->v1, &size_mod32_256);
 
   alignas(alignof(__m256i)) uint8_t packet[32];
   for (int i = 0; i < remainder - (const uint8_t *)bytes; i++) {
@@ -115,7 +120,8 @@ static void InternalPermuteAndUpdate(HighwayHashState *restrict state) {
   InternalUpdate(state, &temp);
 }
 
-static uint64_t inline InternalHighwayHashFinalize64(
+// Verified.
+static inline uint64_t InternalHighwayHashFinalize64(
     HighwayHashState *restrict state) {
   for (int i = 0; i < 4; i++) {
     InternalPermuteAndUpdate(state);
@@ -128,7 +134,7 @@ static uint64_t inline InternalHighwayHashFinalize64(
       0);
 }
 
-static __m128i
+static inline __m128i
 InternalHighwayHashFinalize128(HighwayHashState *restrict state) {
   for (int i = 0; i < 6; i++) {
     InternalPermuteAndUpdate(state);
@@ -146,13 +152,18 @@ static inline __m256i ModularReduction(const __m256i b32a32, __m256i b10a10) {
 
   const __m256i shifted1_unmasked = _mm256_add_epi64(b32a32, b32a32);
 
-  b10a10 ^= _mm256_add_epi64(shifted1_unmasked, shifted1_unmasked);
-  b10a10 ^= _mm256_unpacklo_epi64(zero, _mm256_srli_epi64(b32a32, 62));
-  b10a10 ^= _mm256_xor_si256(
-      _mm256_and_si256(_mm256_slli_epi64(_mm256_slli_si256(ones, 8), 63),
-                       shifted1_unmasked),
-      ones);
-  b10a10 ^= _mm256_unpacklo_epi64(zero, _mm256_srli_epi64(b32a32, 63));
+  b10a10 = _mm256_xor_si256(
+      b10a10, _mm256_add_epi64(shifted1_unmasked, shifted1_unmasked));
+  b10a10 = _mm256_xor_si256(
+      b10a10, _mm256_unpacklo_epi64(zero, _mm256_srli_epi64(b32a32, 62)));
+  b10a10 = _mm256_xor_si256(
+      b10a10,
+      _mm256_xor_si256(
+          _mm256_and_si256(_mm256_slli_epi64(_mm256_slli_si256(ones, 8), 63),
+                           shifted1_unmasked),
+          ones));
+  b10a10 = _mm256_xor_si256(
+      b10a10, _mm256_unpacklo_epi64(zero, _mm256_srli_epi64(b32a32, 63)));
 
   return b10a10;
 }
